@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Focus Flow — Productivity App</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {font-family: Arial, sans-serif; background:#0f1724; color:#e6eef8; margin:0; padding:18px;}
+.container {max-width:980px; margin:18px auto; background:#111827; padding:18px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.6);}
+h1 {color:#34d399; margin:6px 0 14px;}
+.row {display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+input, select, textarea, button {padding:8px 10px; border-radius:6px; border:none;}
+input, select, textarea {background:#0b1220; color:#e6eef8;}
+button {background:#10b981; color:#022; cursor:pointer;}
+.tabs {display:flex; gap:8px; margin:12px 0;}
+.tab {padding:8px 12px; background:#0b1220; border-radius:6px; cursor:pointer; color:#e6eef8;}
+.tab.active {background:#10b981; color:#022;}
+.section {display:none;}
+.section.active {display:block;}
+.task-list, #journalList {margin-top:12px;}
+.task-item, .journal-item {display:flex; justify-content:space-between; gap:8px; align-items:center; background:#0b1220; padding:10px; border-radius:6px; margin:6px 0; transition: transform .18s ease, box-shadow .18s ease;}
+.completed {text-decoration:line-through; color:#9aa7b5; opacity:0.9;}
+.priority-badge {padding:4px 8px; border-radius:6px; font-size:12px;}
+.prio-High {background:#ef4444; color:#fff;}
+.prio-Medium {background:#f59e0b; color:#fff;}
+.prio-Low {background:#60a5fa; color:#022;}
+.small {font-size:13px; color:#9aa7b5;}
+.stats {display:flex; gap:8px; margin-top:12px;}
+.stat {flex:1; background:#071023; padding:10px; border-radius:8px; text-align:center;}
+canvas {background:transparent; margin-top:8px;}
+.timer-box {background:#071023; padding:12px; border-radius:8px; display:inline-block; min-width:120px; text-align:center;}
+.mood-badge {font-size:22px; margin-right:8px;}
+.journal-left {display:flex; gap:8px; align-items:flex-start;}
+#userDisplay {font-size:14px; color:#34d399; margin-right:12px; font-weight:bold;}
+#toast {position:fixed; right:20px; bottom:20px; background:#111827; color:#e6eef8; padding:10px 14px; border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.6); display:none; z-index:50;}
+#toast button {margin-left:8px; background:#2563eb; color:#fff; padding:6px 8px; border-radius:6px;}
+.mini-chart-box {width:200px; height:120px; background:#071023; padding:8px; border-radius:8px; display:flex; align-items:center; justify-content:center;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="container" id="login-section">
+  <h1>Focus Flow — Login</h1>
+  <div class="row">
+    <input id="usernameInput" placeholder="Username (type a name)">
+    <button onclick="login()">Login</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="container" id="app-section" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>Focus Flow</h1>
+    <div>
+      <span id="userDisplay"></span>
+      <button onclick="logout()">Logout & Clear Data</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab(event,'tasks')">📋 Tasks</div>
+    <div class="tab" onclick="switchTab(event,'journals')">📔 Journals</div>
+    <div class="tab" onclick="switchTab(event,'timer')">⏱ Timer</div>
+    <div class="tab" onclick="switchTab(event,'pomodoro')">🍓 Pomodoro</div>
+    <div class="tab" onclick="switchTab(event,'summary')">📊 Summary</div>
+  </div>
+
+  <!-- TASKS -->
+  <div id="tasks" class="section active">
+    <div class="row">
+      <input id="taskInput" placeholder="Task likho..." style="flex:1;">
+      <button onclick="addTask()">Add Task</button>
+      <div style="margin-left:auto;">
+        <div class="mini-chart-box"><canvas id="miniChart" width="180" height="100"></canvas></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="small">Total</div><div id="totalCount">0</div></div>
+      <div class="stat"><div class="small">Completed</div><div id="completedCount">0</div></div>
+      <div class="stat"><div class="small">Pending</div><div id="pendingCount">0</div></div>
+    </div>
+    <div class="task-list" id="taskList"></div>
+  </div>
+
+  <!-- JOURNALS -->
+  <div id="journals" class="section">
+    <div class="row">
+      <textarea id="journalInput" rows="3" style="flex:1; background:#071023; color:#e6eef8;" placeholder="Write short note..."></textarea>
+      <button onclick="addJournal()">Add Journal</button>
+    </div>
+    <div id="journalList"></div>
+  </div>
+
+  <!-- SIMPLE TIMER -->
+  <div id="timer" class="section">
+    <h2>Simple Timer</h2>
+    <div class="row">
+      <div class="timer-box"><div class="small">Elapsed</div><div id="simpleTimerDisplay">00:00:00</div></div>
+      <div>
+        <button onclick="startTimer()">Start</button>
+        <button onclick="pauseTimer()">Pause</button>
+        <button onclick="resetTimer()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- POMODORO -->
+  <div id="pomodoro" class="section">
+    <h2>Pomodoro</h2>
+    <div class="row">
+      <label>Work(min): <input id="workMin" type="number" value="25" style="width:60px;"></label>
+      <label>Short Break(min): <input id="shortMin" type="number" value="5" style="width:50px;"></label>
+      <label>Long Break(min): <input id="longMin" type="number" value="15" style="width:50px;"></label>
+      <label>Sessions before long: <input id="sessionBeforeLong" type="number" value="4" style="width:50px;"></label>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <div class="timer-box"><div class="small" id="pomPhaseLabel">READY</div><div id="pomTimerDisplay">00:00</div><div class="small" id="pomSessionLabel">Sessions: 0</div></div>
+      <div>
+        <button onclick="pomodoroStart()">Start</button>
+        <button onclick="pomodoroPauseResume()">Pause/Resume</button>
+        <button onclick="pomodoroReset()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div id="summary" class="section">
+    <h2>Priority-wise Completed vs Pending</h2>
+    <canvas id="priorityChart" width="700" height="300"></canvas>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// -------------------- STATE --------------------
+let user=null, tasks=[], journals=[], undoBuffer=null;
+let miniChart=null, priorityChart=null;
+let simpleTimer=0, simpleInterval=null, simpleRunning=false;
+let pom={phase:'ready',timeLeft:0,running:false,sessionCount:0,interval:null};
+
+// -------------------- UTILS --------------------
+function showToast(msg,withUndo=false){const t=document.getElementById('toast'); if(withUndo){t.innerHTML=msg+' <button onclick="undoDelete()">Undo</button>';}else t.textContent=msg; t.style.display='block'; clearTimeout(t._hideTimer); t._hideTimer=setTimeout(()=>{t.style.opacity=0; setTimeout(()=>t.style.display='none',400);},withUndo?6000:1500);}
+function saveSession(){if(!user) return; sessionStorage.setItem('ff_'+user,JSON.stringify({tasks,journals,simpleTimer,pom}));}
+function loadSession(){if(!user) return; const raw=sessionStorage.getItem('ff_'+user); if(raw){ const data=JSON.parse(raw); tasks=data.tasks||[]; journals=data.journals||[]; simpleTimer=data.simpleTimer||0; pom=data.pom||pom; renderTasks(); renderJournals(); updateCharts(); document.getElementById('simpleTimerDisplay').innerText=formatHMS(simpleTimer);}}
+
+// -------------------- LOGIN & TABS --------------------
+function login(){const name=document.getElementById('usernameInput').value.trim();if(!name){alert('Enter username');return;} user=name; document.getElementById('userDisplay').innerText='Logged in as: '+user; document.getElementById('login-section').style.display='none'; document.getElementById('app-section').style.display='block'; initCharts(); loadSession();}
+function logout(){sessionStorage.removeItem('ff_'+user); location.reload();}
+function switchTab(e,id){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); e.currentTarget.classList.add('active'); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); updateCharts();}
+
+// -------------------- TASKS --------------------
+function detectPriority(text){
+    text=text.toLowerCase();
+    if(/\b(urgent|asap|critical|immediately|important|today)\b/i.test(text)) return 'High';
+    if(/\b(later|routine|normal|average|follow up|soon|tomorrow)\b/i.test(text)) return 'Medium';
+    if(/\b(optional|someday|low|trivial|extra|nice to have|if possible)\b/i.test(text)) return 'Low';
+    return 'Medium'; // Default Medium
+}
+function addTask(){
+    let text=document.getElementById('taskInput').value.trim();
+    if(!text){showToast('Task dalein pehle'); return;}
+    let prio=detectPriority(text);
+    tasks.unshift({text,priority:prio,completed:false,id:'t'+Date.now()});
+    document.getElementById('taskInput').value='';
+    renderTasks();
+    saveSession();
+    updateCharts();
+    showToast('Task added ✔ ('+prio+')');
+}
+function toggleTask(i){tasks[i].completed=!tasks[i].completed; renderTasks(); saveSession(); updateCharts();}
+function deleteTask(i){const removed=tasks.splice(i,1)[0]; renderTasks(); undoBuffer={type:'task',item:removed,index:i}; saveSession(); showToast('Task deleted',true);}
+function renderTasks(){
+    const list=document.getElementById('taskList'); list.innerHTML='';
+    const total=tasks.length, comp=tasks.filter(t=>t.completed).length;
+    document.getElementById('totalCount').innerText=total;
+    document.getElementById('completedCount').innerText=comp;
+    document.getElementById('pendingCount').innerText=total-comp;
+    tasks.forEach((t,i)=>{
+        const div=document.createElement('div');
+        div.className='task-item';
+        div.innerHTML=`<span class="${t.completed?'completed':''}">${t.text}</span>
+        <span class="priority-badge prio-${t.priority}">${t.priority}</span>
+        <button onclick="toggleTask(${i})">${t.completed?'Undo':'Done'}</button>
+        <button onclick="deleteTask(${i})">Delete</button>`;
+        list.appendChild(div);
+    });
+}
+
+// -------------------- JOURNALS & MOOD --------------------
+function detectMood(text){text=text.toLowerCase(); const happy=['happy','good','great','awesome','love','😊','😃','😄']; const sad=['sad','bad','terrible','unhappy','😢','😞','😔']; let h=happy.some(w=>text.includes(w)), s=sad.some(w=>text.includes(w)); if(h && !s) return 'Happy'; if(s && !h) return 'Sad'; return 'Neutral';}
+function moodEmoji(m){return m==='Happy'?'😃':m==='Sad'?'😢':'😐';}
+function addJournal(){const text=document.getElementById('journalInput').value.trim(); if(!text){showToast('Note dalein pehle'); return;} const mood=detectMood(text); journals.unshift({text,mood,id:'j'+Date.now()}); document.getElementById('journalInput').value=''; renderJournals(); saveSession(); showToast('Journal added ('+mood+')');}
+function deleteJournal(i){const removed=journals.splice(i,1)[0]; renderJournals(); undoBuffer={type:'journal',item:removed,index:i}; saveSession(); showToast('Journal deleted',true);}
+function renderJournals(){const list=document.getElementById('journalList'); list.innerHTML=''; journals.forEach((j,i)=>{const div=document.createElement('div'); div.className='journal-item'; div.innerHTML=`<div class="journal-left"><span class="mood-badge">${moodEmoji(j.mood)}</span><span>${j.text}</span></div><div><button onclick="deleteJournal(${i})">Delete</button></div>`; list.appendChild(div);});}
+
+// -------------------- UNDO --------------------
+function undoDelete(){if(!undoBuffer) return; if(undoBuffer.type==='task'){tasks.splice(undoBuffer.index,0,undoBuffer.item); renderTasks();} if(undoBuffer.type==='journal'){journals.splice(undoBuffer.index,0,undoBuffer.item); renderJournals();} undoBuffer=null; saveSession(); updateCharts(); showToast('Undo done');}
+
+// -------------------- CHARTS --------------------
+function initCharts(){if(!miniChart){const ctx=document.getElementById('miniChart').getContext('2d'); miniChart=new Chart(ctx,{type:'doughnut',data:{labels:['Completed','Pending'],datasets:[{data:[0,0],backgroundColor:['#10b981','#3b82f6']}]},options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}}});} if(!priorityChart){const ctx=document.getElementById('priorityChart').getContext('2d'); priorityChart=new Chart(ctx,{type:'bar',data:{labels:['High','Medium','Low'],datasets:[{label:'Completed',data:[0,0,0],backgroundColor:['#ef4444','#f59e0b','#60a5fa']},{label:'Pending',data:[0,0,0],backgroundColor:['#ef4444','#f59e0b','#60a5fa']}]},options:{responsive:true, scales:{y:{beginAtZero:true, precision:0}}}});}}
+function updateCharts(){const p=['High','Medium','Low']; if(priorityChart){const comp=p.map(pr=>tasks.filter(t=>t.priority===pr && t.completed).length); const pend=p.map(pr=>tasks.filter(t=>t.priority===pr && !t.completed).length); priorityChart.data.datasets[0].data=comp; priorityChart.data.datasets[1].data=pend; priorityChart.update();} if(miniChart){const c=tasks.filter(t=>t.completed).length; miniChart.data.datasets[0].data=[c,tasks.length-c]; miniChart.update();}}
+
+// -------------------- TIMER --------------------
+function formatHMS(sec){let h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return [h,m,s].map(x=>x.toString().padStart(2,'0')).join(':');}
+function startTimer(){if(simpleRunning) return; simpleRunning=true; simpleInterval=setInterval(()=>{simpleTimer++; document.getElementById('simpleTimerDisplay').innerText=formatHMS(simpleTimer); saveSession();},1000);}
+function pauseTimer(){if(!simpleRunning) return; simpleRunning=false; clearInterval(simpleInterval);}
+function resetTimer(){simpleRunning=false; clearInterval(simpleInterval); simpleTimer=0; document.getElementById('simpleTimerDisplay').innerText='00:00:00'; saveSession();}
+
+// -------------------- POMODORO --------------------
+function pomodoroStart(){if(pom.running) return; pom.running=true; pom.phase='work'; pom.timeLeft=document.getElementById('workMin').value*60; updatePomDisplay(); pom.interval=setInterval(pomTick,1000);}
+function pomodoroPauseResume(){if(!pom.running) return; if(pom.interval){clearInterval(pom.interval); pom.interval=null;}else pom.interval=setInterval(pomTick,1000);}
+function pomodoroReset(){if(pom.interval){clearInterval(pom.interval); pom.interval=null;} pom.running=false; pom.phase='ready'; pom.timeLeft=0; pom.sessionCount=0; updatePomDisplay();}
+function pomTick(){if(pom.timeLeft>0){pom.timeLeft--; updatePomDisplay(); saveSession();}else{switch(pom.phase){case 'work':pom.sessionCount++; if(pom.sessionCount%document.getElementById('sessionBeforeLong').value==0){pom.phase='long'; pom.timeLeft=document.getElementById('longMin').value*60;}else{pom.phase='short'; pom.timeLeft=document.getElementById('shortMin').value*60;} break; case 'short': pom.phase='work'; pom.timeLeft=document.getElementById('workMin').value*60; break; case 'long': pom.phase='work'; pom.timeLeft=document.getElementById('workMin').value*60; break;} updatePomDisplay(); saveSession();}}
+function updatePomDisplay(){document.getElementById('pomTimerDisplay').innerText=[Math.floor(pom.timeLeft/60).toString().padStart(2,'0'),(pom.timeLeft%60).toString().padStart(2,'0')].join(':'); document.getElementById('pomPhaseLabel').innerText=pom.phase.toUpperCase(); document.getElementById('pomSessionLabel').innerText='Sessions: '+pom.sessionCount;}
+
+// -------------------- INIT --------------------
+initCharts();
+</script>
+</body>
+</html>
